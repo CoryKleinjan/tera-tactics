@@ -18,9 +18,9 @@ static func draw_unit(canvas: CanvasItem, cls: String, feet: Vector2, scale: flo
 	alpha = alpha_v
 	t = time
 	var s := scale
-	if cls == "BOSS":
-		s *= 1.12
-	elif cls == "GOB" or cls == "GARC":
+	if cls == "BEAST":
+		s *= 0.82
+	elif cls == "TEARLING" or cls == "TEARARC":
 		s *= 0.92
 	c.draw_set_transform(feet, 0.0, Vector2(s * face, s))
 	match cls:
@@ -30,11 +30,11 @@ static func draw_unit(canvas: CanvasItem, cls: String, feet: Vector2, scale: flo
 		"ACHR": _archer()
 		"MAGE": _mage()
 		"HEAL": _healer()
-		"GOB": _goblin()
-		"GARC": _goblin_archer()
-		"DWF": _dwarf()
-		"DMAG": _dark_mage()
-		"BOSS": _boss()
+		"TEARLING": _tearling()
+		"TEARARC": _tearling_archer()
+		"BRUTE": _brute()
+		"SEER": _seer()
+		"BEAST": _beast()
 	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
@@ -179,66 +179,75 @@ static func _healer() -> void:
 	c.draw_arc(Vector2(9, -36.5), 3.2, 0, TAU, 16, k("#f5cd55"), 1.8, true)
 	circ(8.5, -16, 2.2, SKIN)
 
-static func _goblin_body(tunic: String) -> void:
-	body(tunic, GOB, "#4b3a22", "#3d2b18", GOB, GOB)
-	poly([[-4, -29], [-11, -32], [-5, -25]], GOB)
-	poly([[3, -30], [8, -35], [5, -26]], GOB)
-	rect(2.5, -27, 1.8, 1.8, "#ff3b30")
+const TEAR_SKIN := "#4a3f70"
+const TEAR_GLOW := "#7ff3ff"
 
-static func _goblin() -> void:
-	_goblin_body("#7a5a36")
-	line(7, -13, 13, -30, "#6b4a2a", 3.6)
-	circ(13.5, -31, 3.4, "#5a3d22")
-	circ(7, -14, 2.2, GOB)
 
-static func _goblin_archer() -> void:
-	_goblin_body("#5d4a7a")
-	half(0, -28, 6, "#4a3a62")
-	bow(GOB)
+static func _tearling_body(tunic: String) -> void:
+	body(tunic, TEAR_SKIN, "#1b1630", "#14102a", TEAR_SKIN, TEAR_SKIN)
+	poly([[-4, -29], [-11, -33], [-5, -25]], TEAR_SKIN)
+	poly([[3, -30], [8, -36], [5, -26]], TEAR_SKIN)
+	rect(2.5, -27, 1.8, 1.8, TEAR_GLOW)
+	line(-3, -19, 2, -14, TEAR_GLOW, 0.9)
 
-static func _dwarf() -> void:
+static func _tearling() -> void:
+	_tearling_body("#241d3a")
+	poly([[6, -14], [16, -30], [13, -31], [5, -16]], "#8d93a0")
+	circ(7, -14, 2.2, TEAR_SKIN)
+
+static func _tearling_archer() -> void:
+	_tearling_body("#2e2448")
+	half(0, -28, 6, "#1b1630")
+	bow(TEAR_SKIN)
+
+static func _brute() -> void:
 	rect(-11, -18, 3, 8, "#4b4960")
 	rect(-6, -7, 5, 7, "#33313f")
 	rect(1, -7, 5, 7, "#33313f")
-	rect(-9, -19, 18, 12, "#56546b")
+	rect(-9, -19, 18, 12, "#5b5a6e")
+	line(-6, -17, -1, -11, TEAR_GLOW, 1.0)
+	line(-1, -11, 4, -16, TEAR_GLOW, 1.0)
 	rect(-9, -10, 18, 2, "#2c2a36")
-	circ(0, -23, 5.5, "#d9a07a")
-	poly([[-5, -22], [6, -22], [3, -11], [-3, -11]], "#aeb0ba")
-	half(0, -24, 6.2, "#33313f")
-	rect(-6.2, -25, 12.4, 1.6, "#24222c")
-	poly([[-1.5, -30], [1.5, -30], [0, -35]], "#8d93a0")
-	rect(2, -23.5, 2, 1.6, "#ff4d3a")
-	line(7, -6, 9, -30, "#4a3622", 2.4)
-	poly([[9, -30], [16, -33], [16, -22], [9, -24]], "#8d93a0")
-	circ(7.5, -12, 2.2, "#d9a07a")
+	circ(0, -23, 5.8, "#6b6a80")
+	half(0, -24, 6.4, "#3a3850")
+	poly([[-4, -29], [-8, -36], [-2, -30]], "#ddd2bd")
+	poly([[3, -30], [6, -37], [5, -29]], "#ddd2bd")
+	rect(1.5, -23.5, 2.5, 1.8, TEAR_GLOW)
+	line(7, -6, 9, -30, "#3a2c20", 2.6)
+	poly([[9, -30], [17, -26], [9, -21]], "#555a66")
+	circ(7.5, -12, 2.4, "#6b6a80")
 
-static func _dark_mage() -> void:
+static func _seer() -> void:
 	robe("#3e2566", "#8b5cf6", "#1b1230")
 	half(0, -27.5, 7, "#2a1848")
 	rect(-7, -28, 3.5, 8, "#2a1848")
 	poly([[-4, -33], [4, -33], [-2, -39]], "#2a1848")
-	rect(1, -27.5, 1.8, 1.4, "#86f0ff")
-	rect(4, -27.5, 1.8, 1.4, "#86f0ff")
+	rect(1, -27.5, 1.8, 1.4, TEAR_GLOW)
+	rect(4, -27.5, 1.8, 1.4, TEAR_GLOW)
 	line(8, -2, 9, -34, "#262130", 2.2)
 	orb(9.5, -37, "#59d0ff")
 	circ(8.5, -16, 2.2, "#1b1230")
 
-static func _boss() -> void:
-	poly([[-7, -24], [6, -24], [9, 0], [-14, 0]], "#8e1b1b")
-	rect(-5, -10, 4, 9, "#24222f")
-	rect(1, -10, 4, 9, "#24222f")
-	rect(-6, -3, 5, 3, "#15141c")
-	rect(1, -3, 6, 3, "#15141c")
-	rect(-8, -23, 16, 14, "#34323f")
-	rect(-2, -20, 4, 7, "#c62828")
-	rect(-8, -12, 16, 2, "#1c1b24")
-	circ(-8, -22, 4, "#4a4759")
-	circ(8, -22, 4, "#4a4759")
-	circ(0, -28, 6.4, "#34323f")
-	rect(1, -28.5, 5, 1.6, "#ff4d3a")
-	poly([[-5, -32], [-9, -41], [-3, -34]], "#ddd2bd")
-	poly([[4, -33], [8, -42], [6, -32]], "#ddd2bd")
-	line(7, -14, 19, -41, "#9aa3b5", 4)
-	line(7, -14, 19, -41, "#dfe5ef", 1.2)
-	line(3.5, -16, 10, -12.5, "#c9a227", 2.4)
-	circ(6.5, -14.5, 2.4, "#4a4759")
+## The giant beast from the tear. Roughly two tiles wide.
+static func _beast() -> void:
+	line(-22, -22, -32, -34, "#2b2540", 4.5)
+	circ(-32, -35, 2.5, "#b388ff")
+	rect(-19, -15, 6, 15, "#2b2540")
+	rect(-10, -15, 6, 15, "#3a3256")
+	rect(8, -15, 6, 15, "#2b2540")
+	rect(17, -15, 6, 15, "#3a3256")
+	for fx in [-19.0, -10.0, 8.0, 17.0]:
+		rect(fx - 0.5, -2, 7, 2, "#ddd2bd")
+	ell(0, -23, 25, 12, "#3a3256")
+	ell(-3, -28, 18, 6, "#4a4170")
+	line(-14, -29, -5, -20, TEAR_GLOW, 1.6)
+	line(-5, -20, 2, -28, TEAR_GLOW, 1.6)
+	line(7, -18, 13, -25, "#b388ff", 1.6)
+	poly([[14, -31], [24, -42], [33, -35], [22, -21]], "#3a3256")
+	ell(31, -37, 9, 6.5, "#3a3256")
+	poly([[35, -36], [44, -33], [35, -30]], "#2b2540")
+	poly([[37, -32], [39, -28.5], [40.5, -32]], "#ffffff")
+	poly([[41, -32], [42.5, -29], [43.5, -32]], "#ffffff")
+	poly([[26, -42], [20, -55], [29, -44]], "#ddd2bd")
+	poly([[31, -43], [34, -56], [35, -42]], "#ddd2bd")
+	rect(33, -39.5, 3.5, 2.2, TEAR_GLOW)

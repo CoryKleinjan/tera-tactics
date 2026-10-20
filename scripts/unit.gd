@@ -21,6 +21,7 @@ var agi := 0
 var mov := 0
 var xp := 0
 var kills := 0
+var shards := 0
 var spells: Array = []
 var items: Array = []
 var ai := "charge"
@@ -62,6 +63,7 @@ static func from_dict(d: Dictionary, team_id: String, uid: int):
 	u.ai = d.get("ai", "charge")
 	u.aggro = d.get("aggro", 0)
 	u.boss = d.get("boss", false)
+	u.shards = d.get("shards", 0)
 	u.awake = u.ai != "guard"
 	u.face = 1 if team_id == "p" else -1
 	return u

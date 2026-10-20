@@ -84,6 +84,22 @@ func _draw() -> void:
 			var dir: Vector2 = corner[1]
 			draw_polyline(PackedVector2Array([q + Vector2(0, dir.y * L), q, q + Vector2(dir.x * L, 0)]), col, 3.0)
 
+	# The tear, behind the units
+	if game.tear_open > 0.01:
+		var open: float = game.tear_open
+		var tc := Vector2(D.TEAR) * TS + Vector2(TS * 0.5, TS * 0.6)
+		var h := 34.0 * open
+		for layer in [[16.0, Color(0.55, 0.35, 1.0, 0.28)], [8.0, Color(0.5, 0.95, 1.0, 0.55)], [2.6, Color(0.92, 1.0, 1.0, 0.95)]]:
+			var w: float = layer[0] * open
+			var pts := PackedVector2Array()
+			for i in 17:
+				var k := i / 16.0
+				pts.append(tc + Vector2(w * sin(PI * k) * (1.0 + 0.18 * sin(t * 7.0 + i * 1.7)), -h + 2.0 * h * k))
+			for i in range(15, 0, -1):
+				var k := i / 16.0
+				pts.append(tc + Vector2(-w * sin(PI * k) * (1.0 + 0.18 * sin(t * 6.0 + i * 2.3)), -h + 2.0 * h * k))
+			draw_colored_polygon(pts, layer[1])
+
 	# Units, back to front
 	var list: Array = game.units.filter(func(u): return u.alive or u.alpha > 0.0)
 	list.sort_custom(func(a, b): return a.py < b.py)
@@ -110,7 +126,7 @@ func _draw() -> void:
 	# Marker over the acting unit
 	if game.cur != null and game.cur.alive and mode != "over" and mode != "intro":
 		var u = game.cur
-		var top := -14.0 - (5.0 if u.cls == "KNT" or u.boss else 0.0)
+		var top := -14.0 - (5.0 if u.cls == "KNT" else (16.0 if u.cls == "BEAST" else 0.0))
 		var m := Vector2(u.px * TS + TS * 0.5 + u.ox, u.py * TS + top + sin(t * 5.0) * 2.5)
 		var tri := PackedVector2Array([m + Vector2(-6, -6), m + Vector2(6, -6), m + Vector2(0, 1)])
 		draw_colored_polygon(tri, Color("#f5cd55"))

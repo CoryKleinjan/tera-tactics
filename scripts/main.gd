@@ -6,6 +6,7 @@ const UnitScript = preload("res://scripts/unit.gd")
 const Terrain = preload("res://scripts/terrain.gd")
 const Board = preload("res://scripts/board.gd")
 const Hud = preload("res://scripts/hud.gd")
+const Story = preload("res://scripts/story.gd")
 
 const TS := D.TS
 const COLS := D.COLS
@@ -15,6 +16,7 @@ const BOARD_POS := Vector2(24, 84)
 
 signal turn_done
 signal msg_closed
+signal scene_advance
 
 var units: Array = []
 var mode := "intro"  # intro | busy | move | menu | list | target | over
@@ -38,6 +40,13 @@ var parts: Array = []
 var floats: Array = []
 var msg_speed := 1.0
 var autoplay := false
+var battle_id := "act1"
+var tear_open := 1.0
+var shards := 0
+var girl_revealed := false
+var seen_prologue := false
+var tutorial := {}
+var scene_skipping := false
 
 var msg_text := ""
 var msg_i := 0.0
@@ -67,9 +76,12 @@ func _ready() -> void:
 	hud.cancel.connect(func(): if mode == "target": cancel_target())
 	hud.speed.connect(_toggle_speed)
 	hud.start.connect(_on_start)
+	hud.scene_next.connect(func(): scene_advance.emit())
+	hud.scene_skip.connect(func(): scene_skipping = true; scene_advance.emit())
 	setup()
-	hud.show_intro()
-	hud.set_hint("Read the briefing, then begin the battle.")
+	hud.show_title()
+	hud.set_chapter("Morrowmere")
+	hud.set_hint("Start a new game to begin.")
 	autoplay = "--autoplay" in OS.get_cmdline_user_args()
 	if "--screens" in OS.get_cmdline_user_args():
 		_screens.call_deferred()
@@ -83,7 +95,9 @@ func setup() -> void:
 	units.clear()
 	var i := 0
 	for d in D.PARTY:
-		units.append(UnitScript.from_dict(d, "p", i))
+		var u = UnitScript.from_dict(d, "p", i)
+		u.name = Story.fmt(u.name, girl_revealed)
+		units.append(u)
 		i += 1
 	for d in D.ENEMIES:
 		units.append(UnitScript.from_dict(d, "e", i))
@@ -96,6 +110,9 @@ func setup() -> void:
 	parts.clear()
 	floats.clear()
 	pending.clear()
+	tear_open = 1.0
+	shards = 0
+	tutorial = {}
 
 
 func now() -> float:
@@ -323,6 +340,34 @@ func _process(delta: float) -> void:
 		_update_ui()
 
 
+# ---------- story ----------
+func play_scene(id: String) -> void:
+	var sc: Dictionary = Story.SCENES[id]
+	var prev_mode := mode
+	mode = "scene"
+	scene_skipping = false
+	hud.hide_msg()
+	hud.begin_scene(sc.place, Color(sc.bg))
+	for line in sc.lines:
+		if scene_skipping:
+			break
+		hud.scene_line(Story.speaker_name(line[0], girl_revealed), Story.speaker_class(line[0]), Story.fmt(line[1], girl_revealed))
+		if autoplay:
+			await wait(0.02)
+		else:
+			await scene_advance
+	hud.end_scene()
+	mode = prev_mode
+
+
+## Battle-time story lines, shown in the message box as "Speaker: text".
+func say_lines(lines: Array, hold := 1.0) -> void:
+	for line in lines:
+		var who := Story.speaker_name(line[0], girl_revealed)
+		var text := Story.fmt(line[1], girl_revealed)
+		await say(text if who == "" else "%s: %s" % [who, text], hold)
+
+
 func _toggle_speed() -> void:
 	msg_speed = 0.35 if msg_speed == 1.0 else 1.0
 	hud.speed_btn.text = "Text speed: %s" % ("Normal" if msg_speed == 1.0 else "Fast")
@@ -431,6 +476,9 @@ func defeat(t, by) -> void:
 		if by != null and by.team == "p":
 			gain(by, 24.0 * lvf(by, t))
 			by.kills += 1
+			shards += t.shards
+		if t.boss:
+			create_tween().tween_property(self, "tear_open", 0.0, 1.2)
 	else:
 		await say("%s has fallen!" % t.name, 0.8)
 
@@ -575,6 +623,9 @@ func commit_move(k: int) -> void:
 	threat = {}
 	inspect = null
 	await move_along(u, path_to(reach_r, k))
+	if u.cls == "HERO" and not tutorial.has("menu"):
+		tutorial.menu = true
+		await say_lines(Story.TUTORIAL.menu, 0.9)
 	open_menu()
 
 
@@ -704,7 +755,7 @@ func enemy_turn(u) -> void:
 	if not u.awake and foes.any(func(p): return mdist(p, u) <= u.aggro):
 		u.awake = true
 		if u.boss:
-			await say("Gorgath: So you crossed the river. Your march ends on my blade!", 1.0)
+			await say_lines(Story.BATTLE[battle_id].boss_wakes)
 	var r := reach(u, u.mov if u.awake else 0)
 	var best := {}
 	for k in free_dest(r, u):
@@ -784,6 +835,10 @@ func run_battle() -> String:
 			cur = u
 			hover = null
 			if u.team == "p":
+				if u.cls == "HERO" and not tutorial.has("move"):
+					tutorial.move = true
+					mode = "busy"
+					await say_lines(Story.TUTORIAL.move, 0.9)
 				begin_move(u)
 				await turn_done
 			else:
@@ -802,20 +857,28 @@ func _on_start() -> void:
 		setup()
 	if mode != "intro":
 		return
+	var story: Dictionary = Story.BATTLE[battle_id]
 	hud.hide_overlay()
 	mode = "busy"
 	cur = units[0]
-	hud.set_hint("The Rune Order holds the far bank.")
-	await say("Gorgath: The bridge at Varn belongs to the Rune Order now. Turn back, Lanternguard.", 1.1)
-	await say("Aren: Not while the people of Varn are trapped on the far bank. Everyone, with me!", 1.1)
-	await say("Defeat Gorgath to win. If Aren falls, the battle is lost.", 1.1)
+	if not seen_prologue:
+		hud.set_chapter("Prologue  ·  Washed Ashore")
+		await play_scene("prologue_shore")
+		await play_scene("prologue_shard")
+		seen_prologue = true
+	hud.set_chapter(story.chapter)
+	await play_scene("act1_transfer")
+	hud.set_hint("The tear is open above the far bank.")
+	await say_lines(story.start, 1.1)
 	hud.hide_msg()
 	var r := await run_battle()
 	hud.hide_menus()
 	mode = "busy"
 	if r == "win" and units.any(func(u): return u.team == "e" and u.alive):
-		await say("With Gorgath beaten, the Rune Order soldiers scatter into the hills!", 1.0)
+		await say_lines(story.boss_falls)
 	hud.hide_msg()
+	if r == "win":
+		await play_scene("act1_aftermath")
 	mode = "over"
 	cur = null
 	cursor = null
@@ -823,10 +886,14 @@ func _on_start() -> void:
 	for u in units:
 		if u.team == "p":
 			rows.append([u.name, cls_of(u).label, u.lv, u.kills, "%d/%d" % [u.hp, u.mhp] if u.alive else "Fallen"])
-	hud.show_result(r == "win", rows, round_n)
-	hud.set_hint("Victory! Start again to try for a faster clear." if r == "win" else "Defeat. Start again when you are ready.")
+	if r == "win":
+		hud.show_result("%s  ·  %d rounds" % [story.win_title, round_n], story.win_title, story.win_text, rows,
+			["Dawnshards found: %d" % shards, story.next], "Replay Act 1")
+	else:
+		hud.show_result("Battle lost  ·  round %d" % round_n, "%s has fallen" % Story.HERO_NAME, story.lose_text, rows, [], "Try again")
+	hud.set_hint("Act 1 cleared. Replay it to try for a faster clear." if r == "win" else "Defeat. Try again when you are ready.")
 	if autoplay:
-		print("RESULT ", r, " rounds=", round_n)
+		print("RESULT ", r, " rounds=", round_n, " shards=", shards)
 		for row in rows:
 			print("  ", row)
 		get_tree().quit()
@@ -909,6 +976,11 @@ func _input(ev: InputEvent) -> void:
 		d = Vector2i(-1, 0)
 	elif ev.is_action_pressed("ui_right", true):
 		d = Vector2i(1, 0)
+	if mode == "scene":
+		if ok:
+			scene_advance.emit()
+			get_viewport().set_input_as_handled()
+		return
 	if msg_active and (ok or back):
 		msg_skip()
 		get_viewport().set_input_as_handled()
@@ -1006,21 +1078,21 @@ func _auto_turn() -> void:
 ## Saves screenshots of the briefing, a move turn and the command menu (run with -- --screens).
 func _screens() -> void:
 	await wait(1.5)
-	get_viewport().get_texture().get_image().save_png("user://shot_intro.png")
-	msg_speed = 0.02
+	get_viewport().get_texture().get_image().save_png("user://shot_title.png")
 	_on_start()
+	await wait(0.6)
+	get_viewport().get_texture().get_image().save_png("user://shot_scene.png")
+	var shot_tut := false
 	while mode != "move":
-		await get_tree().process_frame
-	inspect_unit(units[13])
-	inspect = null
-	threat = {}
-	cursor = Vector2i(cur.x + 1, cur.y - 2)
+		if mode == "scene":
+			scene_advance.emit()
+		elif msg_active and not msg_typing:
+			if not shot_tut and msg_text.begins_with(Story.GIRL_HIDDEN_NAME):
+				shot_tut = true
+				get_viewport().get_texture().get_image().save_png("user://shot_tutorial.png")
+			msg_skip()
+		await wait(0.05)
 	await wait(0.6)
 	get_viewport().get_texture().get_image().save_png("user://shot_move.png")
-	on_tile(cur.x, cur.y)
-	while mode != "menu":
-		await get_tree().process_frame
-	await wait(0.4)
-	get_viewport().get_texture().get_image().save_png("user://shot_menu.png")
 	print("SHOTS ", OS.get_user_data_dir())
 	get_tree().quit()

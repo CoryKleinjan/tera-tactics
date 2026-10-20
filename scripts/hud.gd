@@ -5,6 +5,8 @@ signal cmd(action: String)
 signal cancel
 signal speed
 signal start
+signal scene_next
+signal scene_skip
 
 const Portrait = preload("res://scripts/portrait.gd")
 const BOARD_POS := Vector2(24, 84)
@@ -47,6 +49,12 @@ var extra: Label
 var order_title: Label
 var order_text: RichTextLabel
 var speed_btn: Button
+var chapter_label: Label
+var scene_root: ColorRect
+var scene_place: Label
+var scene_portrait
+var scene_speaker: Label
+var scene_text: Label
 
 const LABELS := {"attack": "Attack", "magic": "Magic", "item": "Item", "stay": "Stay", "back": "Undo move"}
 
@@ -164,9 +172,9 @@ func _build() -> void:
 	title.add_theme_color_override("font_outline_color", Color("#14235e"))
 	title.add_theme_constant_override("outline_size", 8)
 	head.add_child(title)
-	var sub := _label("Chapter 1  ·  The Bridge at Varn", 16, MUTED)
-	sub.size_flags_vertical = SIZE_SHRINK_END
-	head.add_child(sub)
+	chapter_label = _label("", 16, MUTED)
+	chapter_label.size_flags_vertical = SIZE_SHRINK_END
+	head.add_child(chapter_label)
 	add_child(head)
 
 	hint = _rich(15)
@@ -318,6 +326,51 @@ func _build() -> void:
 	ov_content.add_theme_constant_override("separation", 12)
 	ob.add_child(ov_content)
 
+	# Story scene player: backdrop over the board, place name, speaker portrait and line
+	scene_root = ColorRect.new()
+	scene_root.position = BOARD_POS - Vector2(4, 4)
+	scene_root.size = BOARD_SIZE + Vector2(8, 8)
+	scene_root.visible = false
+	scene_root.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT: scene_next.emit())
+	add_child(scene_root)
+	scene_place = _label("", 15, MUTED)
+	scene_place.position = Vector2(28, 22)
+	scene_root.add_child(scene_place)
+	var skip := _btn("Skip scene", 14)
+	skip.focus_mode = FOCUS_NONE
+	skip.position = Vector2(BOARD_SIZE.x - 132, 16)
+	skip.pressed.connect(func(): scene_skip.emit())
+	scene_root.add_child(skip)
+	var box := PanelContainer.new()
+	box.position = Vector2(24, BOARD_SIZE.y - 190)
+	box.custom_minimum_size = Vector2(BOARD_SIZE.x - 48, 166)
+	box.mouse_filter = MOUSE_FILTER_IGNORE
+	scene_root.add_child(box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	row.mouse_filter = MOUSE_FILTER_IGNORE
+	box.add_child(row)
+	scene_portrait = Portrait.new()
+	scene_portrait.custom_minimum_size = Vector2(120, 120)
+	scene_portrait.size_flags_vertical = SIZE_SHRINK_BEGIN
+	scene_portrait.mouse_filter = MOUSE_FILTER_IGNORE
+	row.add_child(scene_portrait)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = SIZE_EXPAND_FILL
+	col.mouse_filter = MOUSE_FILTER_IGNORE
+	row.add_child(col)
+	scene_speaker = _label("", 18, GOLD)
+	col.add_child(scene_speaker)
+	scene_text = _label("", 20)
+	scene_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	scene_text.custom_minimum_size.x = 540
+	col.add_child(scene_text)
+	var more := _label("Click or press Enter to continue", 12, MUTED)
+	more.size_flags_vertical = SIZE_EXPAND_FILL
+	more.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	more.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	col.add_child(more)
+
 
 # ---------- message box ----------
 func show_msg(top: bool) -> void:
@@ -452,19 +505,19 @@ func _clear_overlay() -> void:
 		ch.queue_free()
 
 
-func show_intro() -> void:
+func set_chapter(t: String) -> void:
+	chapter_label.text = t
+
+
+func show_title() -> void:
 	_clear_overlay()
-	ov_content.add_child(_label("CHAPTER 1", 13, MUTED))
-	ov_content.add_child(_label("The Bridge at Varn", 28, GOLD))
-	var p := _label("The Rune Order has seized the only crossing on the Varn river. Lead the Lanternguard over the water and break their commander, Gorgath the Rune Knight.", 16)
+	ov_content.add_child(_label("A TACTICAL RPG", 13, MUTED))
+	ov_content.add_child(_label("Tera Tactics", 34, GOLD))
+	var p := _label("Wash up on the shores of Morrowmere with no memory, and fight your way through the tears between worlds.", 16)
 	p.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	p.custom_minimum_size.x = 510
 	ov_content.add_child(p)
-	var r := _rich(15)
-	r.add_theme_color_override("default_color", MUTED)
-	r.text = "[b]Win:[/b] defeat Gorgath.\n[b]Lose:[/b] Aren, your Swordsman, falls.\nTurn order is set by agility each round, friend and foe mixed."
-	ov_content.add_child(r)
-	var b := _btn("BEGIN BATTLE", 16)
+	var b := _btn("NEW GAME", 16)
 	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 	b.custom_minimum_size = Vector2(180, 42)
 	b.pressed.connect(func(): start.emit())
@@ -473,11 +526,12 @@ func show_intro() -> void:
 	b.grab_focus.call_deferred()
 
 
-func show_result(win: bool, rows: Array, round_n: int) -> void:
+## rows: [[name, class, lv, kills, hp text]]. notes: extra lines under the table.
+func show_result(eyebrow: String, title: String, text: String, rows: Array, notes: Array, button: String) -> void:
 	_clear_overlay()
-	ov_content.add_child(_label(("CHAPTER 1 CLEARED  ·  %d ROUNDS" if win else "BATTLE LOST  ·  ROUND %d") % round_n, 13, MUTED))
-	ov_content.add_child(_label("Victory at Varn" if win else "Aren has fallen", 28, GOLD))
-	var p := _label("Gorgath is beaten and the bridge is open. The Lanternguard marches on." if win else "The Lanternguard pulls back across the river. Regroup and try a different approach.", 16)
+	ov_content.add_child(_label(eyebrow.to_upper(), 13, MUTED))
+	ov_content.add_child(_label(title, 28, GOLD))
+	var p := _label(text, 16)
 	p.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	p.custom_minimum_size.x = 510
 	ov_content.add_child(p)
@@ -492,13 +546,35 @@ func show_result(win: bool, rows: Array, round_n: int) -> void:
 			var fallen: bool = i == 4 and row[i] == "Fallen"
 			g.add_child(_label(str(row[i]), 15, Color(FOE) if fallen else TEXT))
 	ov_content.add_child(g)
-	var b := _btn("PLAY AGAIN" if win else "TRY AGAIN", 16)
+	for n in notes:
+		ov_content.add_child(_label(n, 15, MUTED))
+	var b := _btn(button.to_upper(), 16)
 	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 	b.custom_minimum_size = Vector2(160, 42)
 	b.pressed.connect(func(): start.emit())
 	ov_content.add_child(b)
 	overlay.visible = true
 	b.grab_focus.call_deferred()
+
+
+# ---------- story scenes ----------
+func begin_scene(place: String, bg: Color) -> void:
+	scene_root.color = bg
+	scene_place.text = place.to_upper()
+	scene_root.visible = true
+
+
+func scene_line(speaker: String, cls: String, text: String) -> void:
+	scene_speaker.text = speaker
+	scene_speaker.visible = speaker != ""
+	scene_portrait.visible = cls != ""
+	scene_portrait.unit = {"cls": cls} if cls != "" else null
+	scene_text.text = text
+	scene_text.add_theme_color_override("font_color", MUTED if speaker == "" else TEXT)
+
+
+func end_scene() -> void:
+	scene_root.visible = false
 
 
 func hide_overlay() -> void:
